@@ -1,12 +1,9 @@
 name: Formal Release Build
 
+# 自用仓库里没有生产签名 secrets（RELEASE_KEYSTORE_BASE64 等），这个流程保持手动触发，
+# 不要在 push master 时自动跑（否则每次都会红）。自用发版请走 self_release.yml。
 on:
   workflow_dispatch:
-  push:
-    branches: [ master ]
-    paths-ignore:
-      - '**.md'
-      - '**.txt'
 
 concurrency:
   group: formal-release-${{ github.ref }}
