@@ -54,6 +54,10 @@ internal class ThemeIconProvider(
         val packageName = sbn.packageName?.takeIf { it.isNotBlank() } ?: return null
         return try {
             val user = sbn.user
+            // SystemUI's own notifications are posted against UserHandle.ALL, whose identifier is
+            // -1. It is kept as-is for the cache key, but the per-user PackageManager lookups
+            // below refuse to run on it: they would throw NameNotFoundException for a valid
+            // package, and the public API fallback resolves the same information correctly.
             val userId = sbn.publicUserId
             val configuration = iconConfiguration.read(context)
             val key = CacheKey(
@@ -196,19 +200,25 @@ internal class ThemeIconProvider(
         )
     }
 
-    private fun PackageManager.getApplicationInfoAsUserOrNull(packageName: String, userId: Int): ApplicationInfo? =
-        invokePackageManagerMethod(
+    private fun PackageManager.getApplicationInfoAsUserOrNull(packageName: String, userId: Int): ApplicationInfo? {
+        // UserHandle.ALL (-1) has no per-user package record; the public API below resolves it.
+        if (userId < 0) return null
+        return invokePackageManagerMethod(
             methodName = "getApplicationInfoAsUser",
             parameterTypes = arrayOf(String::class.java, Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!),
             args = arrayOf(packageName, 0, userId),
         ) as? ApplicationInfo
+    }
 
-    private fun PackageManager.getActivityInfoAsUserOrNull(componentName: ComponentName, userId: Int): ActivityInfo? =
-        invokePackageManagerMethod(
+    private fun PackageManager.getActivityInfoAsUserOrNull(componentName: ComponentName, userId: Int): ActivityInfo? {
+        // Same as above: skip the per-user lookup for userless notifications.
+        if (userId < 0) return null
+        return invokePackageManagerMethod(
             methodName = "getActivityInfoAsUser",
             parameterTypes = arrayOf(ComponentName::class.java, Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!),
             args = arrayOf(componentName, 0, userId),
         ) as? ActivityInfo
+    }
 
     @Suppress("DEPRECATION")
     private fun PackageManager.getApplicationInfoOrNull(packageName: String): ApplicationInfo? = try {
@@ -231,18 +241,39 @@ internal class ThemeIconProvider(
     ): Any? = try {
         javaClass.getMethod(methodName, *parameterTypes).invoke(this, *args)
     } catch (exception: NoSuchMethodException) {
-        diagnostics.memberMissing(
-            scope = "theme_icon:package_manager:$methodName",
-            message = "PackageManager.$methodName 精确签名不存在，使用公开 API 回退",
+        // ColorOS 17 dropped getActivityInfoAsUser(ComponentName, int, int). The public
+        // getActivityInfo(ComponentName, int) fallback is equivalent, so an absent private
+        // overload is an expected generation difference, not a defect.
+        diagnostics.report(
+            level = DiagnosticLevel.Debug,
+            event = DiagnosticEvent.MemberMissing,
+            message = "PackageManager.$methodName 精确签名在本机不存在，使用公开 API 回退",
             cause = exception,
+            attributes = mapOf("scope" to "theme_icon:package_manager:$methodName"),
+            occurrence = OccurrencePolicy.Once("theme_icon:package_manager:$methodName"),
         )
         null
     } catch (exception: Exception) {
-        diagnostics.runtimeFailure(
-            scope = "theme_icon:package_manager:$methodName",
-            message = "调用 PackageManager.$methodName 失败，使用公开 API 回退",
-            cause = exception,
-        )
+        // A userless notification (UserHandle.ALL) cannot be resolved per user; the caller falls
+        // back to the public API, so a wrapped NameNotFoundException is not an error either.
+        val nameNotFound = generateSequence(exception as Throwable?) { it.cause }
+            .any { it is PackageManager.NameNotFoundException }
+        if (nameNotFound) {
+            diagnostics.report(
+                level = DiagnosticLevel.Debug,
+                event = DiagnosticEvent.HookRuntimeFailed,
+                message = "调用 PackageManager.$methodName 失败，使用公开 API 回退",
+                cause = exception,
+                attributes = mapOf("scope" to "theme_icon:package_manager:$methodName"),
+                occurrence = OccurrencePolicy.Once("theme_icon:package_manager:$methodName"),
+            )
+        } else {
+            diagnostics.runtimeFailure(
+                scope = "theme_icon:package_manager:$methodName",
+                message = "调用 PackageManager.$methodName 失败，使用公开 API 回退",
+                cause = exception,
+            )
+        }
         null
     }
 

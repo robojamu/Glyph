@@ -137,6 +137,7 @@ internal class LockScreenCapsuleHooks(
         val colorHooks = listOfNotNull(
             members.groupIconInitCapsuleIconColor,
             members.groupIconAccessInitCapsuleIconColor,
+            members.groupIconAccessInitIconViewColor,
         )
         for (method in colorHooks) {
             hooks.install(method, "systemui.lockscreen.capsule.group_icon_color") { chain ->
