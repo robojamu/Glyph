@@ -118,6 +118,7 @@ internal data class FullScreenBannerMembers(
     val bannerSetIcon: Method?,
     val builderIcon: Field?,
     val builderAvatarIcon: Field?,
+    val builderLargeIconWithBadge: Field?,
     val lastNotificationEntry: Field?,
     val helperContext: Field?,
     val helperFullScreenBanner: Field?,
@@ -687,10 +688,7 @@ internal object SystemUiMembers {
         } else {
             null
         }
-        val groupIconInitEntryIconDrawable = if (
-            groupIconManager != null &&
-            cachingIconView != null
-        ) {
+        val groupIconInitEntryIconDrawable = if (groupIconManager != null && cachingIconView != null) {
             Reflection.findMethodReturning(
                 groupIconManager,
                 "initEntryIconDrawable",
@@ -700,8 +698,8 @@ internal object SystemUiMembers {
                 android.widget.TextView::class.java,
                 FrameLayout::class.java,
                 Boolean::class.javaPrimitiveType!!,
-                // Wildcard: the host resolves kotlin.jvm.functions.Function1 through a
-                // different class loader, so the two Class objects never compare equal.
+                // Wildcard: SystemUI bundles its own Kotlin stdlib, so the host's
+                // kotlin.jvm.functions.Function1 is a different Class than the module's.
                 null,
             )
         } else {
@@ -731,8 +729,17 @@ internal object SystemUiMembers {
         }
         // ColorOS 17 removed initCapsuleIconColor() and access$initCapsuleIconColor(); the capsule
         // colouring was folded into initEntryIconDrawable(), which LockScreenCapsuleHooks already
-        // hooks. A missing entry here is an expected generation difference, not a defect, so it is
-        // deliberately not reported.
+        // hooks. Only report when every capsule colouring entry is gone.
+        if (
+            groupIconInitCapsuleIconColor == null &&
+            groupIconAccessInitCapsuleIconColor == null &&
+            groupIconInitEntryIconDrawable == null
+        ) {
+            diagnostics.memberMissing(
+                scope = "systemui:lockscreen:capsule:group_icon",
+                message = "未找到 GroupIconManager 锁屏胶囊着色入口，聚合锁屏胶囊可能仍显示灰色",
+            )
+        }
 
         return LockScreenCapsuleMembers(
             notificationIconDataCtors = ctors,
@@ -938,6 +945,9 @@ internal object SystemUiMembers {
         val builderAvatarIcon = builder?.let {
             Reflection.findField(it, "mAvatarIcon", Drawable::class.java)
         }
+        val builderLargeIconWithBadge = builder?.let {
+            Reflection.findField(it, "mLargeIconWithBadge", Drawable::class.java)
+        }
         val lastNotificationEntry = Reflection.findField(
             helper,
             "mLastNotificationEntry",
@@ -985,6 +995,7 @@ internal object SystemUiMembers {
             bannerSetIcon = bannerSetIcon,
             builderIcon = builderIcon,
             builderAvatarIcon = builderAvatarIcon,
+            builderLargeIconWithBadge = builderLargeIconWithBadge,
             lastNotificationEntry = lastNotificationEntry,
             helperContext = helperContext,
             helperFullScreenBanner = helperFullScreenBanner,

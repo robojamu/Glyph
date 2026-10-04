@@ -173,43 +173,35 @@ internal class NotificationPanelHooks(
         } else {
             // ColorOS 17 removed initIconViewColor(): it was folded into
             // initEntryIconDrawable(). That method also fills the pill and the count, so it can
-            // never be swallowed — colour the group icon right after it returns instead.
+            // never be swallowed — colour the group icon right after the host returns instead.
             members.groupIconInitEntryIconDrawable?.let { method ->
                 hooks.install(method, "systemui.panel.group.initEntryIconDrawable") { chain ->
-                    val snapshot = configuration.snapshot
-                    if (!snapshot.config.panelIconReplacementEnabled) return@install chain.proceed()
                     // args[4] == true marks the capsule path, owned by LockScreenCapsuleHooks.
                     if (chain.args.getOrNull(4) as? Boolean == true) return@install chain.proceed()
-                    val entry = chain.args.getOrNull(0)
+                    val snapshot = configuration.snapshot
+                    if (!snapshot.config.panelIconReplacementEnabled) return@install chain.proceed()
+                    val entry = chain.args.getOrNull(0) ?: return@install chain.proceed()
                     val iconView = chain.args.getOrNull(1) as? ImageView
-                    val result = chain.proceed()
-                    if (entry == null || iconView == null) return@install result
-                    try {
-                        val sbn = members.notificationEntryGetSbn.invoke(entry) as? StatusBarNotification
-                            ?: return@install result
-                        val plan = snapshot.resolver.resolvePanelIconPlan(
-                            context = iconView.context,
-                            sbn = sbn,
-                            originalSmallIcon = sbn.originalSmallIcon(diagnostics, snapshot.revision),
-                        ) ?: return@install result
-                        if (!configuration.isCurrent(snapshot)) return@install result
-                        iconView.post {
-                            if (!configuration.isCurrent(snapshot)) return@post
-                            iconView.clearColorFilter()
-                            iconView.imageTintList = null
-                            iconView.setImageDrawable(plan.drawable)
-                            plan.tintColor?.let { tint ->
-                                iconView.colorFilter = PorterDuffColorFilter(tint, PorterDuff.Mode.SRC_IN)
-                            }
-                        }
-                    } catch (exception: Exception) {
-                        diagnostics.runtimeFailure(
-                            scope = "panel:group_entry_icon",
-                            message = "折叠分组图标着色覆盖失败，交回 ColorOS 原实现",
-                            cause = exception,
-                            revision = snapshot.revision,
+                        ?: return@install chain.proceed()
+                    // The host paints a round background onto the icon view from this callback, so
+                    // wrap it and re-apply our plan once the host's own painting has run. Nothing
+                    // is applied on success — a failed hook must leave ColorOS untouched.
+                    val originalCallback = chain.args.getOrNull(5)
+                    val result = if (originalCallback == null) {
+                        chain.proceed()
+                    } else {
+                        // Chain.getArgs() is immutable; hand the wrapped callback over through
+                        // proceed(). wrapHostCallback proxies the host's own Function1 class,
+                        // which the module cannot implement — SystemUI ships its own stdlib.
+                        chain.proceed(
+                            chain.args.toTypedArray().also {
+                                it[5] = wrapHostCallback(method.parameterTypes[5], originalCallback) {
+                                    applyGroupSummaryIcon(iconView, entry, snapshot)
+                                }
+                            },
                         )
                     }
+                    applyGroupSummaryIcon(iconView, entry, snapshot)
                     result
                 }
             }
@@ -356,6 +348,26 @@ internal class NotificationPanelHooks(
         } catch (exception: Exception) {
             diagnostics.runtimeFailure(
                 scope = "panel:replace_icon:${target.diagnosticName}",
+                message = "通知面板规则图标注入失败，保留 ColorOS 原结果",
+                cause = exception,
+                revision = snapshot.revision,
+            )
+        }
+    }
+
+    private fun applyGroupSummaryIcon(iconView: ImageView, entry: Any, snapshot: RuntimeSnapshot) {
+        if (!configuration.isCurrent(snapshot)) return
+        try {
+            val sbn = members.notificationEntryGetSbn.invoke(entry) as? StatusBarNotification ?: return
+            val plan = snapshot.resolver.resolvePanelIconPlan(
+                context = iconView.context,
+                sbn = sbn,
+                originalSmallIcon = sbn.originalSmallIcon(diagnostics, snapshot.revision),
+            ) ?: return
+            iconView.applyRenderPlan(plan, PanelIconTarget.OplusGroupSummary)
+        } catch (exception: Exception) {
+            diagnostics.runtimeFailure(
+                scope = "panel:replace_icon:${PanelIconTarget.OplusGroupSummary.diagnosticName}",
                 message = "通知面板规则图标注入失败，保留 ColorOS 原结果",
                 cause = exception,
                 revision = snapshot.revision,

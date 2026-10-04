@@ -14,7 +14,6 @@ import com.fankes.coloros.notify.hook.HookRegistrar
 import com.fankes.coloros.notify.hook.runtimeFailure
 import java.util.Collections
 import java.util.WeakHashMap
-import kotlin.jvm.functions.Function1
 
 /**
  * ColorOS 16 lock-screen notification capsule (bottom pill between shortcuts).
@@ -166,17 +165,18 @@ internal class LockScreenCapsuleHooks(
             val iconView = chain.args.getOrNull(1) as? ImageView
                 ?: return@install chain.proceed()
             if (!isLockScreenIslandIconView(iconView)) return@install chain.proceed()
-            val originalCallback = chain.args.getOrNull(5) as? Function1<Any?, Unit>
+            val originalCallback = chain.args.getOrNull(5)
             val result = if (originalCallback != null) {
-                // Chain.getArgs() is immutable; wrap the callback in a fresh argument array.
-                val newArgs = chain.args.toTypedArray()
-                newArgs[5] = object : Function1<Any?, Unit> {
-                    override fun invoke(result: Any?) {
-                        originalCallback.invoke(result)
-                        iconView.post { overrideGroupIconColor(iconView, entry) }
-                    }
-                }
-                chain.proceed(newArgs)
+                // Chain.getArgs() is immutable; hand the wrapped callback over through proceed().
+                // wrapHostCallback proxies the host's own Function1 class, which the module cannot
+                // implement directly — its kotlin-stdlib is a different class loader.
+                chain.proceed(
+                    chain.args.toTypedArray().also {
+                        it[5] = wrapHostCallback(method.parameterTypes[5], originalCallback) {
+                            iconView.post { overrideGroupIconColor(iconView, entry) }
+                        }
+                    },
+                )
             } else {
                 chain.proceed()
             }

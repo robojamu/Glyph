@@ -109,6 +109,8 @@ internal class FullScreenBannerHooks(
                     if (avatar != null) {
                         it[2] = plan.drawable.constantState?.newDrawable()?.mutate() ?: plan.drawable
                     }
+                    // ColorOS 17: largeIconWithBadge takes precedence over the icon argument.
+                    if (it.size > 4) it[4] = null
                 }
             } else {
                 null
@@ -151,6 +153,7 @@ internal class FullScreenBannerHooks(
             builder,
             plan.drawable.constantState?.newDrawable()?.mutate() ?: plan.drawable,
         )
+        members.builderLargeIconWithBadge?.set(builder, null)
         return plan
     }
 
