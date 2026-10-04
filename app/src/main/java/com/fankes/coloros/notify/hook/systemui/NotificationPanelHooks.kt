@@ -184,8 +184,7 @@ internal class NotificationPanelHooks(
                     val iconView = chain.args.getOrNull(1) as? ImageView
                         ?: return@install chain.proceed()
                     // The host paints a round background onto the icon view from this callback, so
-                    // wrap it and re-apply our plan once the host's own painting has run. Nothing
-                    // is applied on success — a failed hook must leave ColorOS untouched.
+                    // wrap it and re-apply our plan once the host's own painting has run.
                     val originalCallback = chain.args.getOrNull(5)
                     val result = if (originalCallback == null) {
                         chain.proceed()
