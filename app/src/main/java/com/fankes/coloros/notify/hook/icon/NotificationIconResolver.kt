@@ -247,9 +247,9 @@ internal class NotificationIconResolver(
         NotificationIconPolicy.shouldKeepHostDefault(policyConfig, sbn.isOplusPush())
 
     /**
-     * True when ColorOS itself is going to render a personal avatar for this package, in which case
-     * the avatar-capable surfaces must keep the host result. Callers that render outside
-     * [resolvePanelIconPlan] (lock-screen capsule, AOD) must ask before consulting
+     * True when the user picked this package for the personal avatar and ColorOS is going to render
+     * that avatar, in which case the avatar-capable surfaces must keep the host result. Callers that
+     * render outside [resolvePanelIconPlan] (lock-screen capsule, AOD) must ask before consulting
      * `StatusBarIconReplacementCache`, otherwise a status-bar replacement cached for the same
      * package would still take the slot.
      *
@@ -260,14 +260,18 @@ internal class NotificationIconResolver(
         val yield = NotificationIconPolicy.shouldYieldToHostAvatar(
             config = policyConfig,
             packageName = packageName,
-            hostAvatarPackages = HostAvatarPackages.packages(context),
         )
         if (yield) {
+            // host_listed=false means ColorOS itself does not render an avatar for that package, so
+            // the pick only removes the module's own icon there — handy while testing a selection.
             diagnostics.report(
                 level = DiagnosticLevel.Debug,
                 event = DiagnosticEvent.HostAvatarYield,
                 message = "宿主将显示联系人头像，本次不覆盖图标",
-                attributes = mapOf("package" to packageName),
+                attributes = mapOf(
+                    "package" to packageName,
+                    "host_listed" to HostAvatarPackages.contains(context, packageName),
+                ),
                 occurrence = OccurrencePolicy.Once("icon:host_avatar:$packageName"),
             )
         }
@@ -308,6 +312,7 @@ internal class NotificationIconResolver(
         handleOplusPush = oplusPushSpecialHandlingEnabled,
         placeholderEnabled = placeholderIconEnabled,
         hostAvatarPriorityEnabled = hostAvatarPriorityEnabled,
+        avatarPriorityPackages = avatarPriorityPackages,
     )
 
     private companion object {

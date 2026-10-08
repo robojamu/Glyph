@@ -168,6 +168,7 @@ fun RuleListScreen(
     onQueryChange: (String) -> Unit,
     onRuleEnabledChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
     onRuleEnabledAllChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
+    onRuleAvatarPriorityChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
     onInstalledRulesEnabledAllChange: (Boolean, (String) -> Unit) -> Unit,
     bottomPadding: Dp,
     snackbarHostState: SnackbarHostState,
@@ -211,6 +212,7 @@ fun RuleListScreen(
             onQueryChange = onQueryChange,
             onRuleEnabledChange = onRuleEnabledChange,
             onRuleEnabledAllChange = onRuleEnabledAllChange,
+            onRuleAvatarPriorityChange = onRuleAvatarPriorityChange,
             onInstalledRulesEnabledAllChange = onInstalledRulesEnabledAllChange,
             onShowMessage = ::showSnackbar,
             onChooseIcon = onChooseIcon,
@@ -228,6 +230,7 @@ private fun RuleListContent(
     onQueryChange: (String) -> Unit,
     onRuleEnabledChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
     onRuleEnabledAllChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
+    onRuleAvatarPriorityChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
     onInstalledRulesEnabledAllChange: (Boolean, (String) -> Unit) -> Unit,
     onShowMessage: (String) -> Unit,
     onChooseIcon: (IconRule) -> Unit,
@@ -327,6 +330,12 @@ private fun RuleListContent(
                             canEditConfig = state.canEditConfig,
                             onEnabledChange = { onRuleEnabledChange(rule, it, onShowMessage) },
                             onEnabledAllChange = { onRuleEnabledAllChange(rule, it, onShowMessage) },
+                            avatarPriorityEnabled = state.config.hostAvatarPriorityEnabled,
+                            avatarPriority = state.config.avatarPriorityPackages
+                                .contains(rule.packageName),
+                            onAvatarPriorityChange = {
+                                onRuleAvatarPriorityChange(rule, it, onShowMessage)
+                            },
                             onChooseIcon = { onChooseIcon(rule) },
                         )
                     }
@@ -393,8 +402,11 @@ private fun RuleCard(
     rulesEnabled: Boolean,
     ruleLibraryMode: Boolean,
     canEditConfig: Boolean,
+    avatarPriorityEnabled: Boolean,
+    avatarPriority: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onEnabledAllChange: (Boolean) -> Unit,
+    onAvatarPriorityChange: (Boolean) -> Unit,
     onChooseIcon: () -> Unit,
 ) {
     val canChooseIcon = canEditConfig && rulesEnabled && ruleLibraryMode
@@ -447,6 +459,12 @@ private fun RuleCard(
             checked = rule.isEnabledAll,
             enabled = canChooseIcon && rule.isEnabled,
             onCheckedChange = onEnabledAllChange,
+        )
+        ToggleComponent(
+            title = stringResource(R.string.label_host_avatar_priority),
+            checked = avatarPriority,
+            enabled = canEditConfig && avatarPriorityEnabled,
+            onCheckedChange = onAvatarPriorityChange,
         )
     }
 }
@@ -524,6 +542,7 @@ internal fun StandaloneRuleListScreen(
     onQueryChange: (String) -> Unit,
     onRuleEnabledChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
     onRuleEnabledAllChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
+    onRuleAvatarPriorityChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
     onInstalledRulesEnabledAllChange: (Boolean, (String) -> Unit) -> Unit,
     onRuleIconSourceChange: (IconRule, String?, (String) -> Unit) -> Unit,
     onBindUnadaptedApp: (InstalledAppChoice, String, (String) -> Unit) -> Unit,
@@ -540,6 +559,7 @@ internal fun StandaloneRuleListScreen(
             onQueryChange = onQueryChange,
             onRuleEnabledChange = onRuleEnabledChange,
             onRuleEnabledAllChange = onRuleEnabledAllChange,
+            onRuleAvatarPriorityChange = onRuleAvatarPriorityChange,
             onInstalledRulesEnabledAllChange = onInstalledRulesEnabledAllChange,
             bottomPadding = 0.dp,
             snackbarHostState = snackbarHostState,
@@ -569,6 +589,7 @@ private fun RuleListScreenPreview() {
             onQueryChange = {},
             onRuleEnabledChange = { _, _, _ -> },
             onRuleEnabledAllChange = { _, _, _ -> },
+            onRuleAvatarPriorityChange = { _, _, _ -> },
             onInstalledRulesEnabledAllChange = { _, _ -> },
             bottomPadding = 0.dp,
             snackbarHostState = snackbarHostState,

@@ -29,6 +29,8 @@ object RuleStore {
         val placeholderIconEnabled: Boolean = false,
         val lockScreenCapsuleIconReplacementEnabled: Boolean = true,
         val hostAvatarPriorityEnabled: Boolean = true,
+        /** Packages whose notifications must keep the avatar ColorOS renders itself. */
+        val avatarPriorityPackages: Set<String> = emptySet(),
     )
 
     data class MirrorSnapshot(
@@ -76,10 +78,10 @@ object RuleStore {
         "config.lock_screen_capsule_icon_replacement_enabled"
 
     /**
-     * ColorOS 17 renders a personal avatar (contact/group photo) for the packages it whitelists in
-     * Settings.Global.systemui_icon_badge_packages. While this is on, the module leaves those
-     * notifications alone on the surfaces that can show the avatar, instead of painting its own
-     * icon over them. The status bar keeps the configured icon source.
+     * Master switch for the personal avatar passthrough. ColorOS renders a contact/group avatar
+     * (avatar + app-icon badge) itself for some notifications; while this is on and the package is
+     * picked in [KEY_RULE_AVATAR_PRIORITY_PREFIX], the module leaves those notifications alone on
+     * the surfaces that can show the avatar. The status bar keeps the configured icon source.
      */
     const val KEY_HOST_AVATAR_PRIORITY_ENABLED = "config.host_avatar_priority_enabled"
 
@@ -91,6 +93,7 @@ object RuleStore {
     private const val KEY_RULE_ENABLED_PREFIX = "rule.enabled."
     private const val KEY_RULE_ENABLED_ALL_PREFIX = "rule.enabled_all."
     private const val KEY_RULE_ICON_SOURCE_PREFIX = "rule.icon_source."
+    private const val KEY_RULE_AVATAR_PRIORITY_PREFIX = "rule.avatar_priority."
     private const val KEY_RULE_CUSTOM_NAME_PREFIX = "rule.custom_name."
     private val OBSOLETE_KEYS = arrayOf(
         "md3_style_enabled",
@@ -316,6 +319,10 @@ object RuleStore {
         putBoolean(KEY_HOST_AVATAR_PRIORITY_ENABLED, enabled)
     }
 
+    fun setRuleAvatarPriority(packageName: String, enabled: Boolean) = editConfig {
+        putBoolean(ruleAvatarPriorityKey(packageName), enabled)
+    }
+
     fun setRuleEnabled(packageName: String, enabled: Boolean) = editConfig {
         putBoolean(ruleEnabledKey(packageName), enabled)
     }
@@ -404,6 +411,7 @@ object RuleStore {
             true,
         ),
         hostAvatarPriorityEnabled = values.boolean(KEY_HOST_AVATAR_PRIORITY_ENABLED, true),
+        avatarPriorityPackages = avatarPriorityPackagesFrom(values),
     )
 
     fun applyRuleOverrides(
@@ -681,6 +689,17 @@ object RuleStore {
         )
     }
 
+    private fun avatarPriorityPackagesFrom(values: Map<String, *>): Set<String> {
+        val packages = LinkedHashSet<String>()
+        values.forEach { (key, value) ->
+            if (value != true || !key.startsWith(KEY_RULE_AVATAR_PRIORITY_PREFIX)) return@forEach
+            key.removePrefix(KEY_RULE_AVATAR_PRIORITY_PREFIX)
+                .takeIf(String::isNotEmpty)
+                ?.let(packages::add)
+        }
+        return packages
+    }
+
     private fun overridesFrom(values: Map<String, *>): RuleOverrides {
         val enabled = HashMap<String, Boolean>()
         val enabledAll = HashMap<String, Boolean>()
@@ -721,11 +740,13 @@ object RuleStore {
             key.startsWith(KEY_RULE_ENABLED_PREFIX) ||
             key.startsWith(KEY_RULE_ENABLED_ALL_PREFIX) ||
             key.startsWith(KEY_RULE_ICON_SOURCE_PREFIX) ||
+            key.startsWith(KEY_RULE_AVATAR_PRIORITY_PREFIX) ||
             key.startsWith(KEY_RULE_CUSTOM_NAME_PREFIX)
 
     private fun ruleEnabledKey(packageName: String) = KEY_RULE_ENABLED_PREFIX + packageName
     private fun ruleEnabledAllKey(packageName: String) = KEY_RULE_ENABLED_ALL_PREFIX + packageName
     private fun ruleIconSourceKey(packageName: String) = KEY_RULE_ICON_SOURCE_PREFIX + packageName
+    private fun ruleAvatarPriorityKey(packageName: String) = KEY_RULE_AVATAR_PRIORITY_PREFIX + packageName
     private fun ruleCustomNameKey(packageName: String) = KEY_RULE_CUSTOM_NAME_PREFIX + packageName
 
     private fun isSha256(value: String): Boolean =

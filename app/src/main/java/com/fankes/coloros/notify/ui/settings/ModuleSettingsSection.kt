@@ -23,9 +23,8 @@ fun ModuleSettingsSection(
     val canEditConfig = state.canEditConfig
     val ruleLibraryMode = state.config.iconSourceMode == RuleStore.IconSourceMode.RuleLibrary
     IconSourceRow(state = state, onIconSourceModeChange = onIconSourceModeChange)
-    SwitchPreference(
+    ToggleComponent(
         title = stringResource(R.string.label_host_avatar_priority),
-        summary = stringResource(R.string.label_host_avatar_priority_summary),
         checked = state.config.hostAvatarPriorityEnabled,
         enabled = canEditConfig,
         onCheckedChange = onHostAvatarPriorityEnabledChange,

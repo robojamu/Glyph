@@ -108,8 +108,7 @@
     <string name="label_icon_source_desktop_theme">桌面主题</string>
     <string name="label_icon_source_desktop_theme_summary">跟随桌面当前主题或自定义图标，不混用规则库</string>
     <string name="label_panel_icon_replacement_enabled">通知中心图标</string>
-    <string name="label_host_avatar_priority">个人头像优先</string>
-    <string name="label_host_avatar_priority_summary">微信、QQ 等显示联系人头像时（横幅 / 通知栏 / 锁屏 / 息屏）不覆盖成主题图标；状态栏仍按上面的图标来源显示</string>
+    <string name="label_host_avatar_priority">显示个人头像</string>
     <string name="label_lock_screen_capsule_icon_replacement_enabled">锁屏岛图标优化</string>
     <string name="label_oplus_push_special_handling_enabled">适配系统推送</string>
     <string name="label_placeholder_icon_enabled">未适配图标占位</string>

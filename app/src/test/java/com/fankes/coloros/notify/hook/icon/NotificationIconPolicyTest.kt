@@ -308,48 +308,45 @@ class NotificationIconPolicyTest {
     }
 
     @Test
-    fun `host avatar passthrough needs the switch and a whitelisted package`() {
-        val hostPackages = setOf("com.tencent.mm", "com.tencent.mobileqq")
+    fun `host avatar passthrough needs the master switch and a picked package`() {
+        val picked = setOf("com.tencent.mm", "com.tencent.mobileqq")
         assertTrue(
             NotificationIconPolicy.shouldYieldToHostAvatar(
-                config = config(),
+                config = config(avatarPriorityPackages = picked),
                 packageName = "com.tencent.mm",
-                hostAvatarPackages = hostPackages,
             )
         )
         assertTrue(
             NotificationIconPolicy.shouldYieldToHostAvatar(
-                config = config(source = PolicyIconSource.DesktopTheme),
+                config = config(
+                    source = PolicyIconSource.DesktopTheme,
+                    avatarPriorityPackages = picked,
+                ),
                 packageName = "com.tencent.mobileqq",
-                hostAvatarPackages = hostPackages,
             )
         )
         assertFalse(
             NotificationIconPolicy.shouldYieldToHostAvatar(
-                config = config(hostAvatarPriorityEnabled = false),
+                config = config(hostAvatarPriorityEnabled = false, avatarPriorityPackages = picked),
                 packageName = "com.tencent.mm",
-                hostAvatarPackages = hostPackages,
             )
         )
         assertFalse(
             NotificationIconPolicy.shouldYieldToHostAvatar(
-                config = config(),
+                config = config(avatarPriorityPackages = picked),
                 packageName = "com.eg.android.AlipayGphone",
-                hostAvatarPackages = hostPackages,
-            )
-        )
-        assertFalse(
-            NotificationIconPolicy.shouldYieldToHostAvatar(
-                config = config(),
-                packageName = null,
-                hostAvatarPackages = hostPackages,
             )
         )
         assertFalse(
             NotificationIconPolicy.shouldYieldToHostAvatar(
                 config = config(),
                 packageName = "com.tencent.mm",
-                hostAvatarPackages = emptySet(),
+            )
+        )
+        assertFalse(
+            NotificationIconPolicy.shouldYieldToHostAvatar(
+                config = config(avatarPriorityPackages = picked),
+                packageName = null,
             )
         )
     }
@@ -361,6 +358,7 @@ class NotificationIconPolicyTest {
         handleOplusPush: Boolean = true,
         placeholderEnabled: Boolean = false,
         hostAvatarPriorityEnabled: Boolean = true,
+        avatarPriorityPackages: Set<String> = emptySet(),
     ) = IconPolicyConfig(
         rulesEnabled = rulesEnabled,
         source = source,
@@ -368,6 +366,7 @@ class NotificationIconPolicyTest {
         handleOplusPush = handleOplusPush,
         placeholderEnabled = placeholderEnabled,
         hostAvatarPriorityEnabled = hostAvatarPriorityEnabled,
+        avatarPriorityPackages = avatarPriorityPackages,
     )
 
     private data class RuleCase(

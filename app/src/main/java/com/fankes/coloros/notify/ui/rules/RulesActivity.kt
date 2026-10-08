@@ -56,6 +56,7 @@ class RulesActivity : ComponentActivity() {
                     onQueryChange = ::updateQuery,
                     onRuleEnabledChange = ::setRuleEnabled,
                     onRuleEnabledAllChange = ::setRuleEnabledAll,
+                    onRuleAvatarPriorityChange = ::setRuleAvatarPriority,
                     onInstalledRulesEnabledAllChange = ::setInstalledRulesEnabledAll,
                     onRuleIconSourceChange = ::setRuleIconSource,
                     onBindUnadaptedApp = ::bindUnadaptedApp,
@@ -211,6 +212,18 @@ class RulesActivity : ComponentActivity() {
             rules = uiState.rules.mapRule(rule.packageName) { it.copy(isEnabled = enabled) },
             config = RuleStore.moduleConfig,
         )
+    }
+
+    private fun setRuleAvatarPriority(rule: IconRule, enabled: Boolean, onShowMessage: (String) -> Unit) {
+        val service = requireFrameworkService(onShowMessage) ?: return
+        val updated = RemoteConfigCoordinator.update(
+            service = service,
+            mutation = { RuleStore.setRuleAvatarPriority(rule.packageName, enabled) },
+        ) { result ->
+            showPublishFailure(result, onShowMessage)
+        }
+        if (!updated) return
+        uiState = uiState.copy(config = RuleStore.moduleConfig)
     }
 
     private fun setRuleEnabledAll(rule: IconRule, enabledAll: Boolean, onShowMessage: (String) -> Unit) {

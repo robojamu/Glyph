@@ -12,6 +12,7 @@ internal data class IconPolicyConfig(
     val handleOplusPush: Boolean,
     val placeholderEnabled: Boolean,
     val hostAvatarPriorityEnabled: Boolean,
+    val avatarPriorityPackages: Set<String>,
 )
 
 internal enum class RuleReplacement {
@@ -50,9 +51,10 @@ internal object NotificationIconPolicy {
         config.rulesEnabled && config.source == PolicyIconSource.DesktopTheme
 
     /**
-     * ColorOS draws the personal avatar itself (avatar + app-icon badge) for the packages in
-     * [hostAvatarPackages]. On every surface that can show that avatar the host result must win: the
-     * module's own drawable would land on the very same view and hide the photo.
+     * True only for the packages the user picked: ColorOS renders the personal avatar itself
+     * (avatar + app-icon badge) for those, so on every surface that can show that avatar the host
+     * result must win — the module's own drawable would land on the very same view and hide the
+     * photo. Nothing is implicit: an empty package set means the module replaces icons everywhere.
      *
      * The status bar is not part of this decision — it only shows an avatar for important
      * conversations, which `StatusBarHooks` already guards through `StatusBarIcon.Type.PeopleAvatar`.
@@ -60,11 +62,10 @@ internal object NotificationIconPolicy {
     fun shouldYieldToHostAvatar(
         config: IconPolicyConfig,
         packageName: String?,
-        hostAvatarPackages: Set<String>,
     ): Boolean =
         config.hostAvatarPriorityEnabled &&
             !packageName.isNullOrEmpty() &&
-            packageName in hostAvatarPackages
+            packageName in config.avatarPriorityPackages
 
     fun selectRuleReplacement(
         config: IconPolicyConfig,
