@@ -307,18 +307,67 @@ class NotificationIconPolicyTest {
         )
     }
 
+    @Test
+    fun `host avatar passthrough needs the switch and a whitelisted package`() {
+        val hostPackages = setOf("com.tencent.mm", "com.tencent.mobileqq")
+        assertTrue(
+            NotificationIconPolicy.shouldYieldToHostAvatar(
+                config = config(),
+                packageName = "com.tencent.mm",
+                hostAvatarPackages = hostPackages,
+            )
+        )
+        assertTrue(
+            NotificationIconPolicy.shouldYieldToHostAvatar(
+                config = config(source = PolicyIconSource.DesktopTheme),
+                packageName = "com.tencent.mobileqq",
+                hostAvatarPackages = hostPackages,
+            )
+        )
+        assertFalse(
+            NotificationIconPolicy.shouldYieldToHostAvatar(
+                config = config(hostAvatarPriorityEnabled = false),
+                packageName = "com.tencent.mm",
+                hostAvatarPackages = hostPackages,
+            )
+        )
+        assertFalse(
+            NotificationIconPolicy.shouldYieldToHostAvatar(
+                config = config(),
+                packageName = "com.eg.android.AlipayGphone",
+                hostAvatarPackages = hostPackages,
+            )
+        )
+        assertFalse(
+            NotificationIconPolicy.shouldYieldToHostAvatar(
+                config = config(),
+                packageName = null,
+                hostAvatarPackages = hostPackages,
+            )
+        )
+        assertFalse(
+            NotificationIconPolicy.shouldYieldToHostAvatar(
+                config = config(),
+                packageName = "com.tencent.mm",
+                hostAvatarPackages = emptySet(),
+            )
+        )
+    }
+
     private fun config(
         rulesEnabled: Boolean = true,
         source: PolicyIconSource = PolicyIconSource.RuleLibrary,
         panelEnabled: Boolean = true,
         handleOplusPush: Boolean = true,
         placeholderEnabled: Boolean = false,
+        hostAvatarPriorityEnabled: Boolean = true,
     ) = IconPolicyConfig(
         rulesEnabled = rulesEnabled,
         source = source,
         panelEnabled = panelEnabled,
         handleOplusPush = handleOplusPush,
         placeholderEnabled = placeholderEnabled,
+        hostAvatarPriorityEnabled = hostAvatarPriorityEnabled,
     )
 
     private data class RuleCase(

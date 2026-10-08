@@ -77,6 +77,7 @@ class HomeActivity : ComponentActivity() {
                         ::setLockScreenCapsuleIconReplacementEnabled,
                     onOplusPushSpecialHandlingEnabledChange = ::setOplusPushSpecialHandlingEnabled,
                     onPlaceholderIconEnabledChange = ::setPlaceholderIconEnabled,
+                    onHostAvatarPriorityEnabledChange = ::setHostAvatarPriorityEnabled,
                     onLauncherIconHiddenChange = ::setLauncherIconHidden,
                     onQueryChange = ::updateQuery,
                     onRuleEnabledChange = ::setRuleEnabled,
@@ -171,6 +172,11 @@ class HomeActivity : ComponentActivity() {
     private fun setPlaceholderIconEnabled(enabled: Boolean, onShowMessage: (String) -> Unit) {
         val service = requireFrameworkService(onShowMessage) ?: return
         updateConfig(service, onShowMessage) { RuleStore.setPlaceholderIconEnabled(enabled) }
+    }
+
+    private fun setHostAvatarPriorityEnabled(enabled: Boolean, onShowMessage: (String) -> Unit) {
+        val service = requireFrameworkService(onShowMessage) ?: return
+        updateConfig(service, onShowMessage) { RuleStore.setHostAvatarPriorityEnabled(enabled) }
     }
 
     private fun updateConfig(

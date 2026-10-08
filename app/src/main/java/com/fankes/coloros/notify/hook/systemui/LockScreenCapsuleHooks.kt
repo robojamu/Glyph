@@ -293,6 +293,10 @@ internal class LockScreenCapsuleHooks(
         sbn: StatusBarNotification?,
     ): ReplacementPlan? {
         if (!lockScreenCapsuleEnabled()) return null
+        // ColorOS composes the contact avatar for whitelisted packages. Yielding is checked before
+        // the cache lookup so a status-bar replacement cached for the same package cannot take the
+        // icon slot either.
+        if (configuration.snapshot.resolver.shouldYieldToHostAvatar(context, packageName)) return null
         StatusBarIconReplacementCache.lookup(key, packageName)?.let { cached ->
             val drawable = try {
                 cached.icon.loadDrawable(context)?.mutate()

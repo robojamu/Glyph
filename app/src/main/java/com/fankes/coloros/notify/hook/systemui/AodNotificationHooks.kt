@@ -137,6 +137,9 @@ internal class AodNotificationHooks(
         packageName: String?,
         sbn: StatusBarNotification?,
     ): Icon? {
+        // Same rule as the lock-screen capsule: yield to the host avatar before reusing a cached
+        // status-bar replacement for the same package.
+        if (configuration.snapshot.resolver.shouldYieldToHostAvatar(context, packageName)) return null
         StatusBarIconReplacementCache.iconFor(key, packageName)?.let { return it }
         val notification = sbn ?: return null
         val snapshot = configuration.snapshot

@@ -64,6 +64,7 @@ fun AboutScreen(
     onLockScreenCapsuleIconReplacementEnabledChange: (Boolean) -> Unit,
     onOplusPushSpecialHandlingEnabledChange: (Boolean) -> Unit,
     onPlaceholderIconEnabledChange: (Boolean) -> Unit,
+    onHostAvatarPriorityEnabledChange: (Boolean) -> Unit,
     onLauncherIconHiddenChange: (Boolean) -> Unit,
     onRootNavigationChange: (Boolean) -> Unit = {},
 ) {
@@ -92,6 +93,7 @@ fun AboutScreen(
                     onLockScreenCapsuleIconReplacementEnabledChange,
                 onOplusPushSpecialHandlingEnabledChange = onOplusPushSpecialHandlingEnabledChange,
                 onPlaceholderIconEnabledChange = onPlaceholderIconEnabledChange,
+                onHostAvatarPriorityEnabledChange = onHostAvatarPriorityEnabledChange,
                 onLauncherIconHiddenChange = onLauncherIconHiddenChange,
                 onOpenThemeSettings = { backStack.add(SettingsRoute.ThemeSettings) },
                 onOpenAboutDetails = { backStack.add(SettingsRoute.AboutDetails) },
@@ -125,6 +127,7 @@ private fun SettingsMainScreen(
     onLockScreenCapsuleIconReplacementEnabledChange: (Boolean) -> Unit,
     onOplusPushSpecialHandlingEnabledChange: (Boolean) -> Unit,
     onPlaceholderIconEnabledChange: (Boolean) -> Unit,
+    onHostAvatarPriorityEnabledChange: (Boolean) -> Unit,
     onLauncherIconHiddenChange: (Boolean) -> Unit,
     onOpenThemeSettings: () -> Unit,
     onOpenAboutDetails: () -> Unit,
@@ -172,6 +175,7 @@ private fun SettingsMainScreen(
                                 onLockScreenCapsuleIconReplacementEnabledChange,
                             onOplusPushSpecialHandlingEnabledChange = onOplusPushSpecialHandlingEnabledChange,
                             onPlaceholderIconEnabledChange = onPlaceholderIconEnabledChange,
+                            onHostAvatarPriorityEnabledChange = onHostAvatarPriorityEnabledChange,
                         )
                     },
                 ),

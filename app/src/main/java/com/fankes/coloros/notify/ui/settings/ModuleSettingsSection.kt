@@ -18,10 +18,18 @@ fun ModuleSettingsSection(
     onLockScreenCapsuleIconReplacementEnabledChange: (Boolean) -> Unit,
     onOplusPushSpecialHandlingEnabledChange: (Boolean) -> Unit,
     onPlaceholderIconEnabledChange: (Boolean) -> Unit,
+    onHostAvatarPriorityEnabledChange: (Boolean) -> Unit,
 ) {
     val canEditConfig = state.canEditConfig
     val ruleLibraryMode = state.config.iconSourceMode == RuleStore.IconSourceMode.RuleLibrary
     IconSourceRow(state = state, onIconSourceModeChange = onIconSourceModeChange)
+    SwitchPreference(
+        title = stringResource(R.string.label_host_avatar_priority),
+        summary = stringResource(R.string.label_host_avatar_priority_summary),
+        checked = state.config.hostAvatarPriorityEnabled,
+        enabled = canEditConfig,
+        onCheckedChange = onHostAvatarPriorityEnabledChange,
+    )
     ToggleComponent(
         title = stringResource(R.string.label_icon_enhancement_enabled),
         checked = state.config.rulesEnabled,

@@ -8,7 +8,10 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
 import android.service.notification.StatusBarNotification
 import androidx.core.graphics.drawable.toDrawable
+import com.fankes.coloros.notify.diagnostics.DiagnosticEvent
+import com.fankes.coloros.notify.diagnostics.DiagnosticLevel
 import com.fankes.coloros.notify.diagnostics.Diagnostics
+import com.fankes.coloros.notify.diagnostics.OccurrencePolicy
 import com.fankes.coloros.notify.hook.runtimeFailure
 import com.fankes.coloros.notify.rules.IconRule
 import com.fankes.coloros.notify.rules.RuleStore
@@ -70,6 +73,9 @@ internal class NotificationIconResolver(
         sbn: StatusBarNotification,
         originalSmallIcon: Icon?,
     ): PanelIconRenderPlan? = resolveOrFallback("panel", "通知面板图标解析失败") {
+        // ColorOS renders "personal avatar + app-icon badge" itself for whitelisted packages
+        // (WeChat, QQ, ...). Leave those rows, banner cards and lock-screen capsules untouched.
+        if (shouldYieldToHostAvatar(context, sbn.packageName)) return@resolveOrFallback null
         if (
             !NotificationIconPolicy.shouldProcessPanel(
                 config = policyConfig,
@@ -240,6 +246,34 @@ internal class NotificationIconResolver(
     fun shouldKeepHostDefault(sbn: StatusBarNotification): Boolean =
         NotificationIconPolicy.shouldKeepHostDefault(policyConfig, sbn.isOplusPush())
 
+    /**
+     * True when ColorOS itself is going to render a personal avatar for this package, in which case
+     * the avatar-capable surfaces must keep the host result. Callers that render outside
+     * [resolvePanelIconPlan] (lock-screen capsule, AOD) must ask before consulting
+     * `StatusBarIconReplacementCache`, otherwise a status-bar replacement cached for the same
+     * package would still take the slot.
+     *
+     * The status bar deliberately never yields here: for these packages the host only shows an
+     * avatar for important conversations, and `StatusBarHooks` already lets that case through.
+     */
+    fun shouldYieldToHostAvatar(context: Context, packageName: String?): Boolean {
+        val yield = NotificationIconPolicy.shouldYieldToHostAvatar(
+            config = policyConfig,
+            packageName = packageName,
+            hostAvatarPackages = HostAvatarPackages.packages(context),
+        )
+        if (yield) {
+            diagnostics.report(
+                level = DiagnosticLevel.Debug,
+                event = DiagnosticEvent.HostAvatarYield,
+                message = "宿主将显示联系人头像，本次不覆盖图标",
+                attributes = mapOf("package" to packageName),
+                occurrence = OccurrencePolicy.Once("icon:host_avatar:$packageName"),
+            )
+        }
+        return yield
+    }
+
     fun shouldKeepHostAppIconBehavior(): Boolean =
         NotificationIconPolicy.shouldKeepHostAppIconBehavior(policyConfig)
 
@@ -273,6 +307,7 @@ internal class NotificationIconResolver(
         panelEnabled = panelIconReplacementEnabled,
         handleOplusPush = oplusPushSpecialHandlingEnabled,
         placeholderEnabled = placeholderIconEnabled,
+        hostAvatarPriorityEnabled = hostAvatarPriorityEnabled,
     )
 
     private companion object {

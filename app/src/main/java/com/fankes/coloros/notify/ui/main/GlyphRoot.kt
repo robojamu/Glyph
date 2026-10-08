@@ -33,6 +33,7 @@ fun GlyphRoot(
     onLockScreenCapsuleIconReplacementEnabledChange: (Boolean, (String) -> Unit) -> Unit,
     onOplusPushSpecialHandlingEnabledChange: (Boolean, (String) -> Unit) -> Unit,
     onPlaceholderIconEnabledChange: (Boolean, (String) -> Unit) -> Unit,
+    onHostAvatarPriorityEnabledChange: (Boolean, (String) -> Unit) -> Unit,
     onLauncherIconHiddenChange: (Boolean, (String) -> Unit) -> Unit,
     onQueryChange: (String) -> Unit,
     onRuleEnabledChange: (IconRule, Boolean, (String) -> Unit) -> Unit,
@@ -100,6 +101,9 @@ fun GlyphRoot(
                     },
                     onPlaceholderIconEnabledChange = {
                         onPlaceholderIconEnabledChange(it, ::showSnackbar)
+                    },
+                    onHostAvatarPriorityEnabledChange = {
+                        onHostAvatarPriorityEnabledChange(it, ::showSnackbar)
                     },
                     onLauncherIconHiddenChange = { onLauncherIconHiddenChange(it, ::showSnackbar) },
                     onRootNavigationChange = { settingsIsRootNavigation = it },

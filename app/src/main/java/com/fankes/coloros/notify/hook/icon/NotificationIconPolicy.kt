@@ -11,6 +11,7 @@ internal data class IconPolicyConfig(
     val panelEnabled: Boolean,
     val handleOplusPush: Boolean,
     val placeholderEnabled: Boolean,
+    val hostAvatarPriorityEnabled: Boolean,
 )
 
 internal enum class RuleReplacement {
@@ -47,6 +48,23 @@ internal object NotificationIconPolicy {
 
     fun shouldResolveTheme(config: IconPolicyConfig): Boolean =
         config.rulesEnabled && config.source == PolicyIconSource.DesktopTheme
+
+    /**
+     * ColorOS draws the personal avatar itself (avatar + app-icon badge) for the packages in
+     * [hostAvatarPackages]. On every surface that can show that avatar the host result must win: the
+     * module's own drawable would land on the very same view and hide the photo.
+     *
+     * The status bar is not part of this decision — it only shows an avatar for important
+     * conversations, which `StatusBarHooks` already guards through `StatusBarIcon.Type.PeopleAvatar`.
+     */
+    fun shouldYieldToHostAvatar(
+        config: IconPolicyConfig,
+        packageName: String?,
+        hostAvatarPackages: Set<String>,
+    ): Boolean =
+        config.hostAvatarPriorityEnabled &&
+            !packageName.isNullOrEmpty() &&
+            packageName in hostAvatarPackages
 
     fun selectRuleReplacement(
         config: IconPolicyConfig,
