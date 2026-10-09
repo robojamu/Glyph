@@ -73,9 +73,31 @@ internal class NotificationIconResolver(
         sbn: StatusBarNotification,
         originalSmallIcon: Icon?,
     ): PanelIconRenderPlan? = resolveOrFallback("panel", "通知面板图标解析失败") {
-        // ColorOS renders "personal avatar + app-icon badge" itself for whitelisted packages
-        // (WeChat, QQ, ...). Leave those rows, banner cards and lock-screen capsules untouched.
+        // ColorOS renders the "personal avatar + app-icon badge" composition itself for the picked
+        // packages. Leave those rows, banner cards and lock-screen capsules untouched.
         if (shouldYieldToHostAvatar(context, sbn.packageName)) return@resolveOrFallback null
+        resolvePanelIconPlanBody(context, sbn, originalSmallIcon)
+    }
+
+    /**
+     * The collapsed group row is the app's own summary: ColorOS draws the app icon plus a count
+     * badge there (`GroupIconManager` / `OplusNotificationGroupExtImpl.attachCollapsedGroupBadge`)
+     * and never a contact avatar, so honouring the avatar here would only replace a themed icon with
+     * the plain one. That row therefore keeps the configured icon source.
+     */
+    fun resolveGroupSummaryIconPlan(
+        context: Context,
+        sbn: StatusBarNotification,
+        originalSmallIcon: Icon?,
+    ): PanelIconRenderPlan? = resolveOrFallback("panel", "通知面板图标解析失败") {
+        resolvePanelIconPlanBody(context, sbn, originalSmallIcon)
+    }
+
+    private fun resolvePanelIconPlanBody(
+        context: Context,
+        sbn: StatusBarNotification,
+        originalSmallIcon: Icon?,
+    ): PanelIconRenderPlan? {
         if (
             !NotificationIconPolicy.shouldProcessPanel(
                 config = policyConfig,

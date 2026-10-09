@@ -108,7 +108,7 @@ internal class NotificationPanelHooks(
     ) {
         try {
             val sbn = row?.let(::statusBarNotificationFromRow) ?: return
-            val plan = snapshot.resolver.resolvePanelIconPlan(
+            val plan = snapshot.resolver.resolveGroupSummaryIconPlan(
                 context = iconView.context,
                 sbn = sbn,
                 originalSmallIcon = sbn.originalSmallIcon(diagnostics, snapshot.revision),
@@ -146,7 +146,7 @@ internal class NotificationPanelHooks(
                 try {
                     val sbn = members.notificationEntryGetSbn.invoke(entry) as? StatusBarNotification
                         ?: return@install chain.proceed()
-                    val plan = snapshot.resolver.resolvePanelIconPlan(
+                    val plan = snapshot.resolver.resolveGroupSummaryIconPlan(
                         context = iconView.context,
                         sbn = sbn,
                         originalSmallIcon = sbn.originalSmallIcon(diagnostics, snapshot.revision),
@@ -224,7 +224,18 @@ internal class NotificationPanelHooks(
                         android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
                         android.content.res.Configuration.UI_MODE_NIGHT_YES
                     val muted = if (night) 0x33FFFFFF.toInt() else 0x33000000
-                    (frame.background as? android.graphics.drawable.GradientDrawable)?.setColor(muted)
+                    val pill = frame.background as? android.graphics.drawable.GradientDrawable
+                    if (pill != null) {
+                        pill.setColor(muted)
+                        // ColorOS pairs its own pill colour with a contrasting digit colour
+                        // (light pill + black digit by day, dark pill + white digit at night). Only
+                        // the pill is repainted here, so the digit has to be re-picked for the muted
+                        // pill: the darkened day pill would otherwise keep a black, unreadable digit.
+                        // The muted pill is dark in light mode and light in dark mode, hence the flip.
+                        val number = chain.args.getOrNull(2) as? android.widget.TextView
+                        number?.setTextColor(if (night) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
+                        number?.alpha = 1f
+                    }
                     result
                 } catch (exception: Exception) {
                     diagnostics.runtimeFailure(
@@ -334,11 +345,21 @@ internal class NotificationPanelHooks(
             }
             if (target == PanelIconTarget.Header) headerIconClaims.release(icon)
             val sbn = statusBarNotificationFromRow(row) ?: return
-            val plan = snapshot.resolver.resolvePanelIconPlan(
-                context = icon.context,
-                sbn = sbn,
-                originalSmallIcon = sbn.originalSmallIcon(diagnostics, snapshot.revision),
-            ) ?: return
+            // The collapsed group row is the app's own summary and never carries a contact avatar,
+            // so it keeps the configured icon source instead of yielding to the host.
+            val plan = if (target == PanelIconTarget.OplusGroupSummary) {
+                snapshot.resolver.resolveGroupSummaryIconPlan(
+                    context = icon.context,
+                    sbn = sbn,
+                    originalSmallIcon = sbn.originalSmallIcon(diagnostics, snapshot.revision),
+                )
+            } else {
+                snapshot.resolver.resolvePanelIconPlan(
+                    context = icon.context,
+                    sbn = sbn,
+                    originalSmallIcon = sbn.originalSmallIcon(diagnostics, snapshot.revision),
+                )
+            } ?: return
 
             icon.applyRenderPlan(plan, target)
             if (target == PanelIconTarget.Header) {
@@ -358,7 +379,7 @@ internal class NotificationPanelHooks(
         if (!configuration.isCurrent(snapshot)) return
         try {
             val sbn = members.notificationEntryGetSbn.invoke(entry) as? StatusBarNotification ?: return
-            val plan = snapshot.resolver.resolvePanelIconPlan(
+            val plan = snapshot.resolver.resolveGroupSummaryIconPlan(
                 context = iconView.context,
                 sbn = sbn,
                 originalSmallIcon = sbn.originalSmallIcon(diagnostics, snapshot.revision),
