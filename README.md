@@ -33,26 +33,6 @@ App 内「关于 → 检查更新」读取本仓库的 Releases。本仓库版�
 规则图标单独同步：首页「更新规则」按钮拉取 [ANIP](https://github.com/BetterAndroid/android-notification-icon-project)
 的清单，无后台自动同步；补充规则应向 ANIP 提交。
 
-## 上游 Glyph 分支的改动（Mangi-11）
-
-以下为上游分支相对 [fankes/ColorOSNotifyIcon](https://github.com/fankes/ColorOSNotifyIcon) 的改动，列出以说明来源。
-本仓库在该分支之上另有改动，明细见 git 提交记录。
-
-主要改动：
-
-- 用 [modern libxposed API 102](https://github.com/libxposed/api) 重写了 Hook 入口
-- 移除了旧框架兼容层
-- 用 [Miuix](https://github.com/compose-miuix-ui/miuix) 重写了 App UI（首页 / 规则 / 关于三栏，液态玻璃底栏）
-- 关于页支持打开本项目与 GitHub Releases 检查更新
-- 功能收敛到通知图标增强，去除其余杂项功能
-- 支持通知图标跟随桌面主题或自定义图标
-- 补齐 ColorOS 经典时钟息屏通知图标（`LockScreenNotificationIconData` → AodPlugin，以及旧版 `NotificationLayout`）
-- 补齐 ColorOS 16 锁屏岛底部通知胶囊图标（`CapsuleNotificationDataController`）。规则图标在锁屏岛染白轮廓，桌面主题保持彩色，避免多条聚合被白色遮罩盖成色块；白色着色不作用于下拉通知与锁屏堆叠
-- 规则管理支持为单个应用手动指定规则库图标，优先于包名匹配
-- 不做后台自动同步
-
-上游分支以作者自身的维护计划为准。
-
 ## 注意事项
 
 1. 本软件免费、兴趣驱动，仅供学习交流；付费获取的版本均非官方渠道。
