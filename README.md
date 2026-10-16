@@ -28,10 +28,18 @@
 
 ## 更新
 
-App 内「关于 → 检查更新」读取本仓库的 Releases。本仓库版本号带 `-cn` 后缀（例如 `3.4.4-cn`），版本比较会忽略该后缀。
+App 内「关于 → 检查更新」读取本仓库的 Releases。本仓库版本号带 `-cn` 后缀（例如 `3.4.5-cn`），版本比较会忽略该后缀。
 
 规则图标单独同步：首页「更新规则」按钮拉取 [ANIP](https://github.com/BetterAndroid/android-notification-icon-project)
 的清单，无后台自动同步；补充规则应向 ANIP 提交。
+
+## 发版
+
+推一个版本号 tag（形如 `3.4.5-cn`）即触发 `.github/workflows/self_release.yml`：Actions 用仓库内
+`.secret/universal.p12` 签名编译，产出 APK 发布到 Releases。该证书与设备上已装的包一致，
+`adb install -r` 可直接覆盖升级，规则包与配置都不会丢。
+
+改动的是 hook 代码时，装完需要重启一次 SystemUI 才会生效。
 
 ## 注意事项
 
