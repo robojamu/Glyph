@@ -1,42 +1,25 @@
 package com.fankes.coloros.notify.hook.systemui
 
 import android.graphics.drawable.Icon
-import java.util.concurrent.ConcurrentHashMap
 
-/**
- * Shares successful status-bar Icon replacements with AOD / lock-screen capsule
- * pipelines that never call IconManager.getIconDescriptor.
- */
+/** Shares replacements only for the exact notification and configuration that produced them. */
 internal object StatusBarIconReplacementCache {
-    data class Entry(
-        val icon: Icon,
-        val isColorable: Boolean,
-    )
+    data class Entry(val icon: Icon, val isColorable: Boolean)
 
-    private val byKey = ConcurrentHashMap<String, Entry>()
-    private val byPackage = ConcurrentHashMap<String, Entry>()
+    private val cache = NotificationIconCache<Entry>()
 
-    fun put(notificationKey: String, packageName: String, icon: Icon, isColorable: Boolean) {
-        val entry = Entry(icon, isColorable)
-        byKey[notificationKey] = entry
-        byPackage[packageName] = entry
-    }
+    fun reset(revision: Long) = cache.reset(revision)
 
-    fun iconFor(notificationKey: String?, packageName: String?): Icon? =
-        lookup(notificationKey, packageName)?.icon
+    fun put(notificationKey: String, packageName: String, icon: Icon, isColorable: Boolean, revision: Long) =
+        cache.put(notificationKey, packageName, Entry(icon, isColorable), revision)
 
-    fun lookup(notificationKey: String?, packageName: String?): Entry? {
-        if (notificationKey != null) {
-            byKey[notificationKey]?.let { return it }
-        }
-        if (packageName != null) {
-            return byPackage[packageName]
-        }
-        return null
-    }
+    fun iconFor(notificationKey: String?, packageName: String?, revision: Long): Icon? =
+        lookup(notificationKey, packageName, revision)?.icon
 
-    fun clear() {
-        byKey.clear()
-        byPackage.clear()
-    }
+    fun lookup(notificationKey: String?, packageName: String?, revision: Long): Entry? =
+        cache.lookup(notificationKey, packageName, revision)
+
+    fun remove(notificationKey: String) = cache.remove(notificationKey)
+
+    fun clear() = cache.clear()
 }

@@ -117,6 +117,7 @@ internal class SystemUiConfiguration(
                         revision = candidate.revision,
                     )
                 }
+                StatusBarIconReplacementCache.reset(candidate.revision)
                 snapshot = candidate
                 diagnostics.report(
                     level = DiagnosticLevel.Info,

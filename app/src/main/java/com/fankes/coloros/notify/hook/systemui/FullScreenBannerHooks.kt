@@ -24,6 +24,14 @@ internal class FullScreenBannerHooks(
 ) {
     @Volatile
     private var lastEntry: Any? = null
+    private val bindings = IconBindingGuard<RuntimeSnapshot>()
+
+    private data class BoundPanelPlan(
+        val snapshot: RuntimeSnapshot,
+        val plan: NotificationIconResolver.PanelIconRenderPlan,
+    ) {
+        val drawable: Drawable get() = plan.drawable
+    }
 
     fun install() {
         installShowBannerHook()
@@ -42,12 +50,18 @@ internal class FullScreenBannerHooks(
         hooks.install(method, "systemui.fullscreen_banner.showBanner") { chain ->
             val entry = chain.args.getOrNull(0)
             if (entry != null) lastEntry = entry
-            val result = chain.proceed()
             val helper = chain.thisObject
+            val previousBanner = members.helperFullScreenBanner?.get(helper)
+            val binding = previousBanner?.let { bindBanner(it, entry) }
+            val result = chain.proceed()
             val context = members.helperContext?.get(helper) as? Context
             val banner = members.helperFullScreenBanner?.get(helper)
             if (context != null && entry != null && banner != null) {
-                refreshBannerIcon(context, banner, entry)
+                if (banner !== previousBanner) {
+                    refreshBannerIcon(context, banner, entry, bindBanner(banner, entry))
+                } else if (binding != null && isCurrentBinding(banner, binding)) {
+                    refreshBannerIcon(context, banner, entry, binding)
+                }
             }
             result
         }
@@ -75,16 +89,17 @@ internal class FullScreenBannerHooks(
             val builder = chain.args.getOrNull(0)
             val context = bannerContext(banner)
             val entry = resolveEntry(banner)
+            val binding = bindBanner(banner, entry)
             val plan = if (builder != null && context != null && entry != null) {
-                patchBuilderIcon(context, builder, entry)
+                patchBuilderIcon(context, builder, entry, binding.snapshot)
             } else {
                 null
             }
             val result = chain.proceed()
             if (plan != null) {
-                schedulePanelRenderPlan(banner, plan)
+                schedulePanelRenderPlan(banner, plan, binding)
             } else if (context != null && entry != null) {
-                refreshBannerIcon(context, banner, entry)
+                refreshBannerIcon(context, banner, entry, binding)
             }
             result
         }
@@ -96,8 +111,9 @@ internal class FullScreenBannerHooks(
             val banner = chain.thisObject ?: return@install chain.proceed()
             val context = bannerContext(banner)
             val entry = resolveEntry(banner)
+            val binding = bindBanner(banner, entry)
             val plan = if (context != null && entry != null) {
-                resolvePanelPlan(context, entry)
+                resolvePanelPlan(context, entry, binding.snapshot)
             } else {
                 null
             }
@@ -119,9 +135,9 @@ internal class FullScreenBannerHooks(
             // which would fall through and invoke the target a second time.
             val result = if (newArgs != null) chain.proceed(newArgs) else chain.proceed()
             if (plan != null) {
-                schedulePanelRenderPlan(banner, plan)
+                schedulePanelRenderPlan(banner, plan, binding)
             } else if (context != null && entry != null) {
-                refreshBannerIcon(context, banner, entry)
+                refreshBannerIcon(context, banner, entry, binding)
             }
             result
         }
@@ -146,8 +162,9 @@ internal class FullScreenBannerHooks(
         context: Context,
         builder: Any,
         entry: Any,
-    ): NotificationIconResolver.PanelIconRenderPlan? {
-        val plan = resolvePanelPlan(context, entry) ?: return null
+        snapshot: RuntimeSnapshot = configuration.snapshot,
+    ): BoundPanelPlan? {
+        val plan = resolvePanelPlan(context, entry, snapshot) ?: return null
         members.builderIcon?.set(builder, plan.drawable)
         members.builderAvatarIcon?.set(
             builder,
@@ -157,11 +174,27 @@ internal class FullScreenBannerHooks(
         return plan
     }
 
-    private fun refreshBannerIcon(context: Context, banner: Any, entry: Any) {
-        resolvePanelPlan(context, entry)?.let { plan ->
-            schedulePanelRenderPlan(banner, plan)
+    private fun refreshBannerIcon(
+        context: Context,
+        banner: Any,
+        entry: Any,
+        binding: IconBindingGuard.Binding<RuntimeSnapshot>,
+    ) {
+        if (!isCurrentBinding(banner, binding)) return
+        resolvePanelPlan(context, entry, binding.snapshot)?.let { plan ->
+            schedulePanelRenderPlan(banner, plan, binding)
         }
     }
+
+    private fun bindBanner(banner: Any, entry: Any?) =
+        bindings.bind(banner, statusBarNotificationFrom(entry)?.key, configuration.snapshot)
+
+    private fun isCurrentBinding(
+        banner: Any,
+        binding: IconBindingGuard.Binding<RuntimeSnapshot>,
+    ): Boolean = bindings.isCurrent(
+        banner, binding, statusBarNotificationFrom(resolveEntry(banner))?.key, configuration.snapshot,
+    )
 
     private fun bannerContext(banner: Any): Context? =
         (banner as? View)?.context ?: members.helperContext?.let { field ->
@@ -180,11 +213,23 @@ internal class FullScreenBannerHooks(
 
     private fun schedulePanelRenderPlan(
         banner: Any,
-        plan: NotificationIconResolver.PanelIconRenderPlan,
+        plan: BoundPanelPlan,
+        binding: IconBindingGuard.Binding<RuntimeSnapshot>,
     ) {
-        applyPanelRenderPlan(banner, plan)
-        val iconView = members.bannerIconView?.get(banner) as? View ?: return
-        iconView.post { applyPanelRenderPlan(banner, plan) }
+        val iconView = members.bannerIconView?.get(banner) as? ImageView ?: return
+        val apply = Runnable {
+            if (!isCurrentBinding(banner, binding)) return@Runnable
+            if (plan.snapshot !== binding.snapshot) return@Runnable
+            if (members.bannerIconView?.get(banner) !== iconView) return@Runnable
+            val sbn = statusBarNotificationFrom(resolveEntry(banner)) ?: return@Runnable
+            if (plan.snapshot.resolver.shouldYieldToHostAvatar(iconView.context, sbn.packageName, sbn)) {
+                return@Runnable
+            }
+            if (!configuration.isCurrent(plan.snapshot)) return@Runnable
+            applyPanelRenderPlan(banner, plan.plan)
+        }
+        apply.run()
+        iconView.post(apply)
     }
 
     private fun applyPanelRenderPlan(
@@ -206,8 +251,8 @@ internal class FullScreenBannerHooks(
     private fun resolvePanelPlan(
         context: Context,
         entry: Any,
-    ): NotificationIconResolver.PanelIconRenderPlan? {
-        val snapshot = configuration.snapshot
+        snapshot: RuntimeSnapshot = configuration.snapshot,
+    ): BoundPanelPlan? {
         if (!snapshot.config.panelIconReplacementEnabled) return null
         val sbn = statusBarNotificationFrom(entry) ?: return null
         return try {
@@ -215,7 +260,7 @@ internal class FullScreenBannerHooks(
                 context = context,
                 sbn = sbn,
                 originalSmallIcon = sbn.originalSmallIcon(diagnostics, snapshot.revision),
-            )?.takeIf { configuration.isCurrent(snapshot) }
+            )?.takeIf { configuration.isCurrent(snapshot) }?.let { BoundPanelPlan(snapshot, it) }
         } catch (exception: Exception) {
             diagnostics.runtimeFailure(
                 scope = "fullscreen_banner:resolve",

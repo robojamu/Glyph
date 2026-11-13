@@ -140,22 +140,25 @@ internal class AodNotificationHooks(
         // Same rule as the lock-screen capsule: yield to the host avatar before reusing a cached
         // status-bar replacement for the same package. A null [sbn] means the caller only knows the
         // notification key, and the yield then stays package-wide.
-        if (configuration.snapshot.resolver.shouldYieldToHostAvatar(context, packageName, sbn)) return null
-        StatusBarIconReplacementCache.iconFor(key, packageName)?.let { return it }
-        val notification = sbn ?: return null
         val snapshot = configuration.snapshot
+        if (sbn != null) StatusBarIconReplacementCache.remove(sbn.key)
+        if (snapshot.resolver.shouldYieldToHostAvatar(context, packageName, sbn)) return null
+        // With a live notification, resolve its current contents rather than an earlier update.
+        if (sbn == null) return StatusBarIconReplacementCache.iconFor(key, packageName, snapshot.revision)
+        val notification = sbn
         return try {
             snapshot.resolver.resolveStatusBarIconPlan(
                 context = context,
                 sbn = notification,
                 originalSmallIcon = notification.originalSmallIcon(diagnostics, snapshot.revision),
-            )?.also { plan ->
+            )?.takeIf { configuration.isCurrent(snapshot) }?.also { plan ->
                 if (configuration.isCurrent(snapshot)) {
                     StatusBarIconReplacementCache.put(
                         notificationKey = notification.key,
                         packageName = notification.packageName,
                         icon = plan.icon,
                         isColorable = plan.isColorable,
+                        revision = snapshot.revision,
                     )
                 }
             }?.icon

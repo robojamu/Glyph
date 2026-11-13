@@ -90,6 +90,22 @@ internal class StatusBarHooks(
         }
 
         hooks.install(members.getIconDescriptor, "systemui.statusbar.getIconDescriptor") { chain ->
+            // The host must build its descriptor from its own icon, not our previous write.
+            try {
+                val entry = chain.args.getOrNull(0)
+                val sbn = entry?.let { members.notificationEntryGetSbn.invoke(it) } as? StatusBarNotification
+                if (sbn != null) {
+                    NotificationSmallIconOverrides.restore(sbn.notification)
+                    StatusBarIconReplacementCache.remove(sbn.key)
+                }
+            } catch (exception: Exception) {
+                diagnostics.runtimeFailure(
+                    scope = "status_bar:restore_icon",
+                    message = "恢复宿主通知图标失败，继续构造图标",
+                    cause = exception,
+                    revision = configuration.snapshot.revision,
+                )
+            }
             val statusBarIcon = chain.proceed() ?: return@install null
             val snapshot = configuration.snapshot
             val notificationEntry = chain.args.getOrNull(0) ?: return@install statusBarIcon
@@ -123,7 +139,9 @@ internal class StatusBarHooks(
                 val groupPathsNeedSync = snapshot.config.panelIconReplacementEnabled &&
                     !snapshot.resolver.shouldYieldToHostAvatar(context, sbn.packageName, sbn)
                 if (groupPathsNeedSync) {
-                    members.notificationSmallIcon?.set(sbn.notification, plan.icon)
+                    if (members.notificationSmallIcon != null) {
+                        NotificationSmallIconOverrides.apply(sbn.notification, plan.icon)
+                    }
                 }
                 iconClaims.claimDescriptor(replacement, sbn.key, plan.isColorable)
                 StatusBarIconReplacementCache.put(
@@ -131,6 +149,7 @@ internal class StatusBarHooks(
                     packageName = sbn.packageName,
                     icon = plan.icon,
                     isColorable = plan.isColorable,
+                    revision = snapshot.revision,
                 )
                 return@install replacement
             } catch (exception: Exception) {

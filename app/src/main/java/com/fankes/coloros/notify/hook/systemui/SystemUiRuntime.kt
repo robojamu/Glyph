@@ -30,6 +30,9 @@ internal class SystemUiRuntime(
 
         // Register before reflection discovery so no committed revision can be missed during setup.
         configuration.start { snapshot ->
+            runPublishedTask(snapshot, "restore_small_icons") {
+                NotificationSmallIconOverrides.restoreAll()
+            }
             refreshBridge?.let { refresh ->
                 runPublishedTask(snapshot, "notification_refresh") {
                     refresh.refresh(snapshot.revision)

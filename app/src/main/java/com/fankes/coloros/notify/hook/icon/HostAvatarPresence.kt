@@ -2,51 +2,44 @@ package com.fankes.coloros.notify.hook.icon
 
 import android.app.Notification
 import android.app.Person
+import android.graphics.Bitmap
+import android.graphics.drawable.Icon
 import android.os.Bundle
 import android.os.Parcelable
 import android.service.notification.StatusBarNotification
 
-/**
- * Whether ColorOS has anything to compose its "personal avatar + app-icon badge" out of.
- *
- * The host builds that composition from the notification itself, so a picked package is only worth
- * yielding to when the notification actually carries an avatar. An ongoing / foreground-service
- * notification from the same package — WeChat's "视频通话中", a media session, a download — carries
- * none, and yielding there does not preserve a photo: it just hands the row over to the host, which
- * falls back to the bare `smallIcon` and the themed icon is lost.
- *
- * Detection reads extras rather than the `Notification` API because the module only ever sees the
- * posted notification. Note that the keys are not a reliable signal on their own: WeChat's call
- * notification ships `android.largeIcon` present but null, so the value is probed, never the key.
- *
- * The heuristic is deliberately limited to the sources ColorOS actually uses — the large icon
- * (WeChat and QQ put the sender's photo there), a `Person`, or a messaging style. Anything else
- * keeps the previous behaviour, i.e. the pick still yields.
- */
+/** Metadata such as MessagingStyle or a contact name alone cannot supply an avatar. */
 internal object HostAvatarPresence {
-
     fun contains(sbn: StatusBarNotification?): Boolean {
-        val extras = sbn?.notification?.extras ?: return false
-        return hasLargeIcon(extras) || hasPeople(extras) || isMessaging(extras)
+        val notification = sbn?.notification ?: return false
+        return try {
+            val extras = notification.extras
+            notification.getLargeIcon() != null ||
+                hasImage(parcelable(extras, Notification.EXTRA_LARGE_ICON)) ||
+                hasImage(parcelable(extras, Notification.EXTRA_LARGE_ICON_BIG)) ||
+                hasPeople(extras) ||
+                hasMessageAvatar(extras, Notification.EXTRA_MESSAGES) ||
+                hasMessageAvatar(extras, Notification.EXTRA_HISTORIC_MESSAGES)
+        } catch (_: Exception) {
+            // Malformed extras must not break a SystemUI hook or invent an avatar.
+            false
+        }
     }
 
-    private fun hasLargeIcon(extras: Bundle): Boolean =
-        parcelable(extras, Notification.EXTRA_LARGE_ICON) != null ||
-            parcelable(extras, Notification.EXTRA_LARGE_ICON_BIG) != null
+    private fun hasImage(value: Parcelable?): Boolean = value is Icon || value is Bitmap
 
-    @Suppress("DEPRECATION") // BundleCompat only widens the API 33 signature for the same call.
+    @Suppress("DEPRECATION")
     private fun hasPeople(extras: Bundle): Boolean =
-        !extras.getParcelableArrayList<Person>(Notification.EXTRA_PEOPLE_LIST).isNullOrEmpty()
+        extras.getParcelableArrayList<Person>(Notification.EXTRA_PEOPLE_LIST)
+            ?.any { it.icon != null } == true
 
-    private fun isMessaging(extras: Bundle): Boolean =
-        extras.containsKey(Notification.EXTRA_MESSAGES) ||
-            extras.containsKey(Notification.EXTRA_HISTORIC_MESSAGES) ||
-            extras.containsKey(Notification.EXTRA_CONVERSATION_TITLE) ||
-            extras.getCharSequence(Notification.EXTRA_TEMPLATE)?.toString() == MESSAGING_STYLE
+    @Suppress("DEPRECATION")
+    private fun hasMessageAvatar(extras: Bundle, key: String): Boolean {
+        val messages = extras.getParcelableArray(key) ?: return false
+        return Notification.MessagingStyle.Message.getMessagesFromBundleArray(messages)
+            .any { it.senderPerson?.icon != null }
+    }
 
-    @Suppress("DEPRECATION") // Same reasoning as above: the key-based read is the portable form.
-    private fun parcelable(extras: Bundle, key: String): Parcelable? =
-        extras.getParcelable(key)
-
-    private const val MESSAGING_STYLE = "android.app.Notification\$MessagingStyle"
+    @Suppress("DEPRECATION")
+    private fun parcelable(extras: Bundle, key: String): Parcelable? = extras.getParcelable(key)
 }

@@ -24,6 +24,8 @@ internal class LockScreenCapsuleHooks(
     private val configuration: SystemUiConfiguration,
     private val members: LockScreenCapsuleMembers,
 ) {
+    private val bindings = IconBindingGuard<RuntimeSnapshot>()
+
     private val replacementDrawables =
         Collections.newSetFromMap(WeakHashMap<Drawable, Boolean>())
 
@@ -121,11 +123,19 @@ internal class LockScreenCapsuleHooks(
         )
         for (method in cardMethods) {
             hooks.install(method, "systemui.lockscreen.capsule.card_bind") { chain ->
-                if (!lockScreenCapsuleEnabled()) return@install chain.proceed()
-                val innerData = chain.args.getOrNull(0) ?: return@install chain.proceed()
                 val card = chain.thisObject ?: return@install chain.proceed()
-                chain.proceed()
-                scheduleAggregateGlyphRefresh(card, innerData)
+                val innerData = chain.args.getOrNull(0)
+                val key = innerData?.let { notificationKey(resolveEntryFromInnerData(it)) }
+                val binding = bindings.bind(card, key, configuration.snapshot)
+                // Invalidate before the host runs, even for disabled / avatar / non-aggregate binds.
+                (members.capsuleCardGetIcon?.invoke(card) as? ImageView)?.let {
+                    bindings.bind(it, key, binding.snapshot)
+                }
+                val result = chain.proceed()
+                if (innerData != null && isCurrentBinding(card, binding, key)) {
+                    scheduleAggregateGlyphRefresh(card, innerData, binding)
+                }
+                result
             }
         }
     }
@@ -140,14 +150,17 @@ internal class LockScreenCapsuleHooks(
         )
         for (method in colorHooks) {
             hooks.install(method, "systemui.lockscreen.capsule.group_icon_color") { chain ->
-                if (!lockScreenCapsuleEnabled()) return@install chain.proceed()
                 val entryIndex = if (java.lang.reflect.Modifier.isStatic(method.modifiers)) 3 else 2
                 val iconIndex = if (java.lang.reflect.Modifier.isStatic(method.modifiers)) 2 else 1
-                val entry = chain.args.getOrNull(entryIndex) ?: return@install chain.proceed()
+                val entry = chain.args.getOrNull(entryIndex)
                 val iconView = chain.args.getOrNull(iconIndex) as? ImageView
                     ?: return@install chain.proceed()
                 if (!isLockScreenIslandIconView(iconView)) return@install chain.proceed()
-                if (overrideGroupIconColor(iconView, entry)) {
+                val binding = bindings.currentOrBind(iconView, notificationKey(entry), configuration.snapshot)
+                if (entry == null) return@install chain.proceed()
+                if (overrideGroupIconColor(iconView, entry, binding.snapshot) {
+                    isCurrentBinding(iconView, binding, notificationKey(entry))
+                }) {
                     null
                 } else {
                     chain.proceed()
@@ -159,12 +172,21 @@ internal class LockScreenCapsuleHooks(
     private fun installCapsuleEntryIconDrawableHook() {
         val method = members.groupIconInitEntryIconDrawable ?: return
         hooks.install(method, "systemui.lockscreen.capsule.initEntryIconDrawable") { chain ->
-            if (!lockScreenCapsuleEnabled()) return@install chain.proceed()
-            if (chain.args.getOrNull(4) as? Boolean != true) return@install chain.proceed()
-            val entry = chain.args.getOrNull(0) ?: return@install chain.proceed()
             val iconView = chain.args.getOrNull(1) as? ImageView
                 ?: return@install chain.proceed()
             if (!isLockScreenIslandIconView(iconView)) return@install chain.proceed()
+            val entry = chain.args.getOrNull(0)
+            val binding = bindings.bind(iconView, notificationKey(entry), configuration.snapshot)
+            if (!binding.snapshot.config.lockScreenCapsuleIconReplacementEnabled ||
+                chain.args.getOrNull(4) as? Boolean != true || entry == null
+            ) return@install chain.proceed()
+            val apply = Runnable {
+                if (isCurrentBinding(iconView, binding, notificationKey(entry))) {
+                    overrideGroupIconColor(iconView, entry, binding.snapshot) {
+                        isCurrentBinding(iconView, binding, notificationKey(entry))
+                    }
+                }
+            }
             val originalCallback = chain.args.getOrNull(5)
             val result = if (originalCallback != null) {
                 // Chain.getArgs() is immutable; hand the wrapped callback over through proceed().
@@ -173,34 +195,74 @@ internal class LockScreenCapsuleHooks(
                 chain.proceed(
                     chain.args.toTypedArray().also {
                         it[5] = wrapHostCallback(method.parameterTypes[5], originalCallback) {
-                            iconView.post { overrideGroupIconColor(iconView, entry) }
+                            iconView.post(apply)
                         }
                     },
                 )
             } else {
                 chain.proceed()
             }
-            iconView.post { overrideGroupIconColor(iconView, entry) }
+            iconView.post(apply)
             result
         }
     }
 
-    private fun scheduleAggregateGlyphRefresh(card: Any, innerData: Any) {
-        if (!isAggregateCard(innerData)) return
+    private fun scheduleAggregateGlyphRefresh(
+        card: Any,
+        innerData: Any,
+        cardBinding: IconBindingGuard.Binding<RuntimeSnapshot>,
+    ) {
+        if (!cardBinding.snapshot.config.lockScreenCapsuleIconReplacementEnabled ||
+            !isAggregateCard(innerData)
+        ) return
         val iconView = members.capsuleCardGetIcon?.invoke(card) as? ImageView ?: return
-        val apply = Runnable { applyAggregateGlyph(innerData, iconView) }
+        val binding = bindings.currentOrBind(iconView, cardBinding.notificationKey, cardBinding.snapshot)
+        val isCurrent = {
+            val key = notificationKey(resolveEntryFromInnerData(innerData))
+            isCurrentBinding(card, cardBinding, key) &&
+                isCurrentBinding(iconView, binding, key) &&
+                members.capsuleCardGetIcon?.invoke(card) === iconView
+        }
+        val apply = Runnable {
+            if (!isCurrent()) return@Runnable
+            val entry = resolveEntryFromInnerData(innerData) ?: return@Runnable
+            if (overrideGroupIconColor(iconView, entry, binding.snapshot, isCurrent) && isCurrent()) {
+                clearInnerDataHostTint(innerData)
+            }
+        }
         iconView.post(apply)
         iconView.postDelayed(apply, 32)
         iconView.postDelayed(apply, 128)
     }
 
-    private fun applyAggregateGlyph(innerData: Any, iconView: ImageView) {
-        val entry = resolveEntryFromInnerData(innerData) ?: return
-        if (!overrideGroupIconColor(iconView, entry)) return
-        clearInnerDataHostTint(innerData)
+    private fun isCurrentBinding(
+        target: Any,
+        binding: IconBindingGuard.Binding<RuntimeSnapshot>,
+        key: String?,
+    ): Boolean = bindings.isCurrent(target, binding, key, configuration.snapshot)
+
+    private fun notificationKey(entry: Any?): String? {
+        if (entry == null) return null
+        return try {
+            (members.notificationEntryGetSbn.invoke(entry) as? StatusBarNotification)?.key
+        } catch (exception: Exception) {
+            diagnostics.runtimeFailure(
+                scope = "lockscreen:capsule:binding",
+                message = "读取锁屏胶囊绑定 key 失败",
+                cause = exception,
+                revision = configuration.snapshot.revision,
+            )
+            null
+        }
     }
 
-    private fun overrideGroupIconColor(iconView: ImageView, entry: Any): Boolean {
+    private fun overrideGroupIconColor(
+        iconView: ImageView,
+        entry: Any,
+        snapshot: RuntimeSnapshot = configuration.snapshot,
+        isCurrentBinding: () -> Boolean = { true },
+    ): Boolean {
+        if (!configuration.isCurrent(snapshot) || !isCurrentBinding()) return false
         if (!isLockScreenIslandIconView(iconView)) return false
         val sbn = try {
             members.notificationEntryGetSbn.invoke(entry) as? StatusBarNotification
@@ -213,9 +275,9 @@ internal class LockScreenCapsuleHooks(
             )
             null
         } ?: return false
-        val plan = resolveReplacementPlan(iconView.context, sbn.key, sbn.packageName, sbn)
+        val plan = resolveReplacementPlan(iconView.context, sbn.key, sbn.packageName, sbn, snapshot)
             ?: return false
-        if (!configuration.isCurrent(plan.snapshot)) return false
+        if (!configuration.isCurrent(plan.snapshot) || !isCurrentBinding()) return false
         applyLockScreenGlyph(iconView, plan.drawable, plan.isColorable)
         return true
     }
@@ -291,14 +353,21 @@ internal class LockScreenCapsuleHooks(
         key: String?,
         packageName: String?,
         sbn: StatusBarNotification?,
+        snapshot: RuntimeSnapshot = configuration.snapshot,
     ): ReplacementPlan? {
-        if (!lockScreenCapsuleEnabled()) return null
+        if (!configuration.isCurrent(snapshot)) return null
+        if (sbn != null) StatusBarIconReplacementCache.remove(sbn.key)
+        if (!snapshot.config.lockScreenCapsuleIconReplacementEnabled) return null
         // ColorOS composes the contact avatar for whitelisted packages. Yielding is checked before
         // the cache lookup so a status-bar replacement cached for the same package cannot take the
         // icon slot either. The notification is passed in: only notifications that actually carry
         // an avatar are left to the host.
-        if (configuration.snapshot.resolver.shouldYieldToHostAvatar(context, packageName, sbn)) return null
-        StatusBarIconReplacementCache.lookup(key, packageName)?.let { cached ->
+        if (snapshot.resolver.shouldYieldToHostAvatar(context, packageName, sbn)) return null
+        // A live entry can have new contents under the same key; only key-only callers use cache.
+        val cached = if (sbn == null) {
+            StatusBarIconReplacementCache.lookup(key, packageName, snapshot.revision)
+        } else null
+        cached?.let {
             val drawable = try {
                 cached.icon.loadDrawable(context)?.mutate()
             } catch (exception: Exception) {
@@ -312,7 +381,7 @@ internal class LockScreenCapsuleHooks(
             } ?: return null
             replacementDrawables.add(drawable)
             return ReplacementPlan(
-                snapshot = configuration.snapshot,
+                snapshot = snapshot,
                 icon = cached.icon,
                 drawable = drawable,
                 isColorable = cached.isColorable,
@@ -320,7 +389,6 @@ internal class LockScreenCapsuleHooks(
         }
 
         val notification = sbn ?: return null
-        val snapshot = configuration.snapshot
         return try {
             snapshot.resolver.resolveStatusBarIconPlan(
                 context = context,
@@ -341,6 +409,7 @@ internal class LockScreenCapsuleHooks(
                             packageName = notification.packageName,
                             icon = plan.icon,
                             isColorable = plan.isColorable,
+                            revision = snapshot.revision,
                         )
                     }
                 }
